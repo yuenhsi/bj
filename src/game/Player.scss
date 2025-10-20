@@ -1,0 +1,31 @@
+.player-point-total {
+    text-align: center;
+    margin-bottom: 6px;
+    font-weight: bold;
+    font-size: 1.15em;
+}
+
+.action-btn-small {
+    padding: 6px 12px;
+    font-size: 0.95em;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-right: 7px;
+    transition: background-color 0.3s;
+}
+.action-btn-small:last-child {
+    margin-right: 0;
+}
+.action-btn-small:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+}
+.player-point-success {
+    color: #28a745;
+}
+.player-point-bust {
+    color: #dc3545;
+}

@@ -1,0 +1,90 @@
+.dealer-container {
+    width: 720px;
+    max-width: 92vw;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 22px 14px;
+    margin-bottom: 1px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border: 1.2px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.dealer-point-total {
+    text-align: center;
+    margin-bottom: 8px;
+    font-weight: bold;
+    font-size: 1.12em;
+    color: #fff;
+}
+
+.dealer-point-success {
+    color: #4caf50;
+}
+
+.dealer-point-bust {
+    color: #f44336;
+}
+
+.dealer-area {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 120px;
+    padding: 8px 0 2px 0;
+    flex-wrap: nowrap;
+}
+
+.dealer-cards {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    height: 120px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #b5b5b5 #1a623d;
+    padding: 4px 0;
+    justify-content: center;
+}
+
+.dealer-cards::-webkit-scrollbar {
+    height: 8px;
+}
+
+.dealer-cards::-webkit-scrollbar-thumb {
+    background: #b5b5b5;
+    border-radius: 4px;
+}
+
+.dealer-cards::-webkit-scrollbar-track {
+    background: #1a623d;
+    border-radius: 4px;
+}
+
+.dealer-card {
+    width: 75px;
+    height: 110px;
+    background: #fff;
+    border-radius: 9px;
+    border: 2px solid #377d51;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4em;
+    color: #265e33;
+    box-shadow: 0 1.5px 6px rgba(0, 0, 0, 0.07);
+    flex: 0 0 auto;
+}
+
+.dealer-card.face-down {
+    background: linear-gradient(135deg, #1a4d3a 0%, #2d5a47 100%);
+    border: 2px solid #4a6b5a;
+    color: #fff;
+}
