@@ -1,79 +1,67 @@
 import React, { useState, useEffect, useRef } from "react";
-import Deck from "../models/Deck.js";
 import "./Game.scss";
 import Player from "./Player.jsx";
 import Dealer from "./Dealer.jsx";
-import {
-    dealCard,
-    dealCardToDealer,
-    flipDealerCard,
-    getTotal,
-    isSoft17,
-    runSequence,
-} from "./gameEngine.js";
+import { useDeck } from "./useDeck.jsx";
 
-const Game = () => {
-    const [deck, setDeck] = useState(null);
-    const [discarded, setDiscarded] = useState(0);
-    const [players, setPlayers] = useState([]);
-    const [dealer, setDealer] = useState({ drawnPile: [], total: 0 });
-    const [activePlayer, setActivePlayer] = useState(null);
-    // 'initialDealing' | 'playerTurn' | 'dealerTurn' | 'handOver'
-    const [phase, setPhase] = useState(null);
+const Game = ({
+    numPlayers = 3,
+    numDecks = 6,
+    reshuffleAt = 120,
+    interval = 300,
+}) => {
+    const { deal, discard, remaining, discarded } = useDeck(
+        numDecks,
+        reshuffleAt
+    );
 
-    useEffect(() => {
-        const PLAYER_COUNT = 1;
-        const DECK_COUNT = 6;
-
-        const gameDeck = new Deck(DECK_COUNT);
-        const playerArr = Array.from({ length: PLAYER_COUNT }, (_, idx) => ({
+    function constructPlayerArr() {
+        return Array.from({ length: numPlayers }, (_, idx) => ({
             id: idx + 1,
             drawnPile: [],
             total: 0,
         }));
-        setDeck(gameDeck);
-        setDiscarded(0);
-        setPlayers(playerArr);
-        setTimeout(() => setPhase("initialDealing"), 1000);
+    }
+
+    const [players, setPlayers] = useState(() => constructPlayerArr());
+    const [dealer, setDealer] = useState({ drawnPile: [], total: 0 });
+    const [activePlayer, setActivePlayer] = useState(null);
+    // 'betting' | 'initialDealing' | 'playerTurn' | 'dealerTurn' | 'handOver'
+    const [phase, setPhase] = useState(null);
+
+    useEffect(() => {
+        setTimeout(() => setPhase("initialDealing"), interval);
     }, []);
 
     useEffect(() => {
-        if (deck && !deck.isEmpty()) {
-            const cb = () => {
-                setActivePlayer(players[0].id);
-                setPhase("playerTurn");
-            };
-
-            if (phase === "initialDealing") {
-                dealBj(cb);
-            } else if (phase === "dealerTurn") {
-                const timer = window.setTimeout(() => {
-                    flipDealerCard();
-                }, 1000);
-                return () => clearTimeout(timer);
-            } else if (phase === "handOver") {
-                const timer = window.setTimeout(() => {
-                    setPlayers(
-                        players.map((player) => {
-                            return {
-                                ...player,
-                                drawnPile: [],
-                                total: 0,
-                            };
-                        })
-                    );
-                    let playerCards = 0;
-                    for (const player of players) {
-                        playerCards += player.drawnPile.length;
-                    }
-                    setDealer({ drawnPile: [], total: 0 });
-                    setDiscarded(
-                        (prev) => prev + playerCards + dealer.drawnPile.length
-                    );
-                    dealBj(cb);
-                }, 1000);
-                return () => clearTimeout(timer);
-            }
+        if (phase === "betting") {
+        } else if (phase === "initialDealing") {
+            dealBj();
+        } else if (phase === "dealerTurn") {
+            const timer = window.setTimeout(() => {
+                flipDealerCard();
+            }, interval);
+            return () => clearTimeout(timer);
+        } else if (phase === "handOver") {
+            const timer = window.setTimeout(() => {
+                setPlayers(
+                    players.map((player) => {
+                        return {
+                            ...player,
+                            drawnPile: [],
+                            total: 0,
+                        };
+                    })
+                );
+                let playerCards = 0;
+                for (const player of players) {
+                    playerCards += player.drawnPile.length;
+                }
+                setDealer({ drawnPile: [], total: 0 });
+                discard(playerCards + dealer.drawnPile.length);
+                setPhase("betting");
+            }, interval * 3);
+            return () => clearTimeout(timer);
         }
     }, [phase]);
 
@@ -86,35 +74,30 @@ const Game = () => {
             // Dealer hits on soft 17 and below
             if (currentTotal < 17 || (currentTotal === 17 && isSoft)) {
                 const timer = setTimeout(() => {
-                    dealCardToDealer(true);
-                }, 1000);
+                    deal((newCard) => dealToDealer(newCard));
+                }, interval);
                 return () => clearTimeout(timer);
             } else {
                 // Dealer is done, end the hand
                 const timer = setTimeout(() => {
                     setPhase("handOver");
-                }, 1000);
+                }, interval);
                 return () => clearTimeout(timer);
             }
         }
     }, [dealer.drawnPile]);
 
-    const dealCard = (playerId, faceUp) => {
-        if (!deck || deck.isEmpty()) return;
-
-        const { newCards, newDeck } = deck.deal(1);
-        setDeck(newDeck);
-
+    const addToPlayer = (playerId, newCard, faceUp) => {
         setPlayers((prevPlayers) =>
             prevPlayers.map((player) => {
                 if (player.id !== playerId) return player;
 
                 const updatedPile = [
                     ...player.drawnPile,
-                    ...newCards.map((card) => ({
-                        ...card,
-                        faceUp: faceUp,
-                    })),
+                    {
+                        ...newCard,
+                        faceUp,
+                    },
                 ];
                 const updatedTotal = faceUp
                     ? _getTotal(updatedPile)
@@ -129,19 +112,14 @@ const Game = () => {
         );
     };
 
-    const dealCardToDealer = (faceUp) => {
-        if (!deck || deck.isEmpty()) return;
-
-        const { newCards, newDeck } = deck.deal(1);
-        setDeck(newDeck);
-
+    const addToDealer = (newCard, faceUp) => {
         setDealer((prevDealer) => {
             const updatedPile = [
                 ...prevDealer.drawnPile,
-                ...newCards.map((card) => ({
-                    ...card,
-                    faceUp: faceUp,
-                })),
+                {
+                    ...newCard,
+                    faceUp,
+                },
             ];
             const updatedTotal = faceUp
                 ? _getTotal(updatedPile)
@@ -155,15 +133,31 @@ const Game = () => {
         });
     };
 
+    const dealToDealer = (newCard) => {
+        setDealer((prevDealer) => {
+            const updatedPile = [
+                ...prevDealer.drawnPile,
+                {
+                    ...newCard,
+                    faceUp: true,
+                },
+            ];
+
+            return {
+                drawnPile: updatedPile,
+                total: _getTotal(updatedPile),
+            };
+        });
+    };
+
     const flipDealerCard = () => {
         setDealer((prevDealer) => {
             const updatedPile = prevDealer.drawnPile.map((card, index) => ({
                 ...card,
-                faceUp: index === 1 ? true : card.faceUp, // Flip the first card (face down card)
+                faceUp: index === 1 ? true : card.faceUp, // Flip the second card
             }));
 
             return {
-                ...prevDealer,
                 drawnPile: updatedPile,
                 total: _getTotal(updatedPile),
             };
@@ -178,81 +172,59 @@ const Game = () => {
         });
     };
 
-    const dealBj = (onComplete) => {
+    function dealBj() {
         // Build the sequence of actions for dealing cards
         const steps = [];
 
-        // Deal first card to each player (face up)
-        players.forEach((player, index) => {
+        // Deal card 1 to players
+        players.forEach((player, idx) => {
             steps.push({
-                delay: index === 0 ? 0 : 1000,
-                action: () => dealCard(player.id, true),
+                delay: idx === 0 ? 0 : interval,
+                action: () =>
+                    deal((newCard) => addToPlayer(player.id, newCard, true)),
             });
         });
 
-        // Deal first card to dealer (face up)
+        // Deal card 1 to dealer
         steps.push({
-            delay: 1000,
-            action: () => dealCardToDealer(true),
+            delay: interval,
+            action: () => deal((newCard) => addToDealer(newCard, true)),
         });
 
-        // Deal second card to each player (face up)
-        players.forEach((player, index) => {
+        // Deal card 2 to players
+        players.forEach((player, _) => {
             steps.push({
-                delay: 1000,
-                action: () => dealCard(player.id, true),
+                delay: interval,
+                action: () =>
+                    deal((newCard) => addToPlayer(player.id, newCard, true)),
             });
         });
 
         // Deal second card to dealer (face down)
         steps.push({
-            delay: 1000,
-            action: () => dealCardToDealer(false),
+            delay: interval,
+            action: () => deal((newCard) => addToDealer(newCard, false)),
         });
 
         // End dealer dealing phase and set active player
         steps.push({
-            delay: 1000,
+            delay: interval,
             action: () => {
-                onComplete();
+                setActivePlayer(players[0].id);
+                setPhase("playerTurn");
             },
         });
 
         // Execute the sequence
         runSequence(steps);
-    };
-
-    const isPlayerActive = (playerId) => {
-        return activePlayer === playerId;
-    };
+    }
 
     const handleHit = (playerId) => {
-        if (!deck || deck.isEmpty()) return;
-
-        const { newCards, newDeck } = deck.deal(1);
-        const updatedPlayers = players.map((player) => {
-            if (player.id !== playerId) return player;
-            const updatedPile = [
-                ...player.drawnPile,
-                ...newCards.map((card) => ({
-                    ...card,
-                    faceUp: true,
-                })),
-            ];
-            const updatedTotal = _getTotal(updatedPile);
-            return { ...player, drawnPile: updatedPile, total: updatedTotal };
-        });
-        const currentPlayer = updatedPlayers.find((p) => p.id === playerId);
-
-        setDeck(newDeck);
-        setPlayers(updatedPlayers);
-
+        deal((newCard) => addToPlayer(playerId, newCard, true));
         if (currentPlayer.total >= 21) _progressGame();
     };
 
     const handleStand = () => {
-        if (!deck || deck.isEmpty()) return;
-
         _progressGame();
     };
 
@@ -267,10 +239,16 @@ const Game = () => {
         }
     };
 
+    const getCardValue = (rank) => {
+        if (rank === "A") return 11;
+        if (["K", "Q", "J"].includes(rank)) return 10;
+        return parseInt(rank, 10);
+    };
+
     const _getTotal = (playerCards) => {
         return playerCards.reduce(
             (sum, card) =>
-                sum + (card && card.faceUp ? Deck.getCardValue(card.rank) : 0),
+                sum + (card && card.faceUp ? getCardValue(card.rank) : 0),
             0
         );
     };
@@ -327,7 +305,7 @@ const Game = () => {
             <div className="game-mat">
                 <div className="game-cards-remaining">
                     <div className="drawpile">
-                        <div className="card-count">{deck?.remaining()}</div>
+                        <div className="card-count">{remaining()}</div>
                         <div className="card-label">Remaining</div>
                     </div>
                     <div className="dealer-section">
@@ -349,11 +327,11 @@ const Game = () => {
                                 onStand={() => handleStand()}
                                 canHit={
                                     phase === "playerTurn" &&
-                                    isPlayerActive(player.id)
+                                    activePlayer === player.id
                                 }
                                 canStand={
                                     phase === "playerTurn" &&
-                                    isPlayerActive(player.id)
+                                    activePlayer === player.id
                                 }
                                 playerCards={player.drawnPile}
                                 total={player.total}
