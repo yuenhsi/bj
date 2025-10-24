@@ -19,22 +19,60 @@ const Game = ({
         return Array.from({ length: numPlayers }, (_, idx) => ({
             id: idx + 1,
             drawnPile: [],
+            chips: 300,
+            stake: 0,
+            playing: false,
             total: 0,
         }));
     }
 
     const [players, setPlayers] = useState(() => constructPlayerArr());
     const [dealer, setDealer] = useState({ drawnPile: [], total: 0 });
-    const [activePlayer, setActivePlayer] = useState(null);
+    const [playerTurn, setPlayerTurn] = useState(null);
     // 'betting' | 'initialDealing' | 'playerTurn' | 'dealerTurn' | 'handOver'
     const [phase, setPhase] = useState(null);
+    const [bettingTimeLeft, setBettingTimeLeft] = useState(interval * 10); // in ms or seconds
 
     useEffect(() => {
-        setTimeout(() => setPhase("initialDealing"), interval);
+        setTimeout(() => setPhase("betting"));
     }, []);
 
     useEffect(() => {
         if (phase === "betting") {
+            let bettingTime = interval * 10; // milliseconds or ticks
+            setBettingTimeLeft(bettingTime);
+
+            // Update countdown every 100ms (or 1s)
+            const countdownTimer = setInterval(() => {
+                setBettingTimeLeft((prev) => {
+                    const remainingTime = prev - 100;
+                    if (remainingTime <= 0) {
+                        console.log(players);
+                        const activePlayers = players.filter(
+                            (p) => p.stake > 0
+                        );
+                        if (activePlayers.length > 0) {
+                            setPlayers((prevPlayers) =>
+                                prevPlayers.map((player) => ({
+                                    ...player,
+                                    playing: true,
+                                }))
+                            );
+                            setPhase("initialDealing");
+                            setBettingTimeLeft(0);
+                            clearInterval(countdownTimer);
+                        } else {
+                            setBettingTimeLeft(bettingTime);
+                        }
+                    } else {
+                        setBettingTimeLeft(remainingTime);
+                    }
+                });
+            }, 100);
+
+            return () => {
+                clearInterval(countdownTimer);
+            };
         } else if (phase === "initialDealing") {
             dealBj();
         } else if (phase === "dealerTurn") {
@@ -49,6 +87,7 @@ const Game = ({
                         return {
                             ...player,
                             drawnPile: [],
+                            playing: false,
                             total: 0,
                         };
                     })
@@ -61,7 +100,7 @@ const Game = ({
                 discard(playerCards + dealer.drawnPile.length);
                 setPhase("betting");
             }, interval * 3);
-            return () => clearTimeout(timer);
+            return () => window.clearTimeout(timer);
         }
     }, [phase]);
 
@@ -210,7 +249,7 @@ const Game = ({
         steps.push({
             delay: interval,
             action: () => {
-                setActivePlayer(players[0].id);
+                setPlayerTurn(players[0].id);
                 setPhase("playerTurn");
             },
         });
@@ -228,14 +267,27 @@ const Game = ({
         _progressGame();
     };
 
+    const handleStake = (playerId, newStake) => {
+        setPlayers((prev) =>
+            prev.map((player) =>
+                player.id !== playerId
+                    ? player
+                    : {
+                          ...player,
+                          stake: newStake,
+                      }
+            )
+        );
+    };
+
     const _progressGame = () => {
         if (!players || players.length === 0) return;
 
-        const playerIdx = players.findIndex((p) => p.id === activePlayer);
+        const playerIdx = players.findIndex((p) => p.id === playerTurn);
         if (playerIdx + 1 === players.length) {
             setPhase("dealerTurn");
         } else {
-            setActivePlayer(players[playerIdx + 1].id);
+            setPlayerTurn(players[playerIdx + 1].id);
         }
     };
 
@@ -270,7 +322,17 @@ const Game = ({
                         ? Math.max(...prevPlayers.map((p) => p.id))
                         : 0;
                 const newId = maxId + 1;
-                return [...prevPlayers, { id: newId, drawnPile: [], total: 0 }];
+                return [
+                    ...prevPlayers,
+                    {
+                        id: newId,
+                        drawnPile: [],
+                        playing: false,
+                        chips: 300,
+                        stake: 15,
+                        total: 0,
+                    },
+                ];
             });
         }
     };
@@ -302,13 +364,19 @@ const Game = ({
                     </button>
                 </div>
             </div>
+            {phase === "betting" && (
+                <div className="betting-countdown-overlay">
+                    Time left to bet: {Math.ceil(bettingTimeLeft / 1000)}s
+                </div>
+            )}
+
             <div className="game-mat">
-                <div className="game-cards-remaining">
+                <div className="dealer-section">
                     <div className="drawpile">
                         <div className="card-count">{remaining()}</div>
                         <div className="card-label">Remaining</div>
                     </div>
-                    <div className="dealer-section">
+                    <div className="dealer-mat">
                         <Dealer
                             dealerCards={dealer.drawnPile}
                             total={dealer.total}
@@ -327,13 +395,18 @@ const Game = ({
                                 onStand={() => handleStand()}
                                 canHit={
                                     phase === "playerTurn" &&
-                                    activePlayer === player.id
+                                    playerTurn === player.id
                                 }
                                 canStand={
                                     phase === "playerTurn" &&
-                                    activePlayer === player.id
+                                    playerTurn === player.id
                                 }
                                 playerCards={player.drawnPile}
+                                chips={player.chips}
+                                stake={player.stake}
+                                changeStake={(newStake) =>
+                                    handleStake(player.id, newStake)
+                                }
                                 total={player.total}
                             />
                         </div>

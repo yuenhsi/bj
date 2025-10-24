@@ -1,8 +1,16 @@
-import React from "react";
-import Deck from "../models/Deck.js";
 import "./Player.scss";
 
-const Player = ({ onHit, onStand, canHit, canStand, playerCards, total }) => {
+const Player = ({
+    onHit,
+    onStand,
+    canHit,
+    canStand,
+    playerCards,
+    chips,
+    stake,
+    changeStake,
+    total,
+}) => {
     // Determine points status
     let pointsClass = "";
     if (total === 21) {
@@ -10,6 +18,22 @@ const Player = ({ onHit, onStand, canHit, canStand, playerCards, total }) => {
     } else if (total > 21) {
         pointsClass = "player-point-bust";
     }
+
+    const handleStakeUp = () => {
+        if (chips > stake + 15) {
+            changeStake(stake + 15);
+        } else {
+            changeStake(chips);
+        }
+    };
+
+    const handleStakeDown = () => {
+        if (stake > 15) {
+            changeStake(stake - 15);
+        } else {
+            changeStake(0);
+        }
+    };
 
     return (
         <div>
@@ -52,6 +76,16 @@ const Player = ({ onHit, onStand, canHit, canStand, playerCards, total }) => {
                 >
                     Stand
                 </button>
+            </div>
+            <div className="player-chips">
+                <div className="chips-safe" onClick={handleStakeUp}>
+                    <span className="chip-label">Safe</span>
+                    <span className="chip-count">{chips - stake}</span>
+                </div>
+                <div className="chips-staked" onClick={handleStakeDown}>
+                    <span className="chip-label">Staked</span>
+                    <span className="chip-count">{stake}</span>
+                </div>
             </div>
         </div>
     );

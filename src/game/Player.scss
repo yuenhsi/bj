@@ -29,3 +29,57 @@
 .player-point-bust {
     color: #dc3545;
 }
+
+.player-chips {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    width: 180px; /* keeps both circles inside comfortably */
+    margin: 12px auto 0;
+}
+
+.chips-safe,
+.chips-staked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    font-weight: 700;
+}
+
+.chips-safe {
+    background: radial-gradient(circle at 30% 30%, #1fa74f, #176a33);
+    color: #fff;
+    position: absolute;
+    left: 20px;
+}
+
+.chips-safe:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+.chips-staked {
+    background: radial-gradient(circle at 30% 30%, #c43333, #861f1f);
+    color: #fff;
+    position: absolute;
+    right: 20px;
+}
+
+.chip-label {
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+
+.chip-count {
+    font-size: 1.6em;
+    font-weight: bold;
+    margin-top: 2px;
+}
