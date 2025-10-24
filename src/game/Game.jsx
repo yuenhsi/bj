@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useReducer, useRef } from "react";
+import {
+    instantiateGameState,
+    gameStateReducer,
+    getTotal,
+} from "./GameState.jsx";
 import "./Game.scss";
 import Player from "./Player.jsx";
 import Dealer from "./Dealer.jsx";
@@ -14,101 +19,78 @@ const Game = ({
         numDecks,
         reshuffleAt
     );
-
-    function constructPlayerArr() {
-        return Array.from({ length: numPlayers }, (_, idx) => ({
-            id: idx + 1,
-            drawnPile: [],
-            chips: 300,
-            stake: 0,
-            playing: false,
-            total: 0,
-        }));
-    }
-
-    const [players, setPlayers] = useState(() => constructPlayerArr());
-    const [dealer, setDealer] = useState({ drawnPile: [], total: 0 });
-    const [playerTurn, setPlayerTurn] = useState(null);
-    // 'betting' | 'initialDealing' | 'playerTurn' | 'dealerTurn' | 'handOver'
-    const [phase, setPhase] = useState(null);
-    const [bettingTimeLeft, setBettingTimeLeft] = useState(interval * 10); // in ms or seconds
+    const [gameState, dispatch] = useReducer(
+        gameStateReducer,
+        instantiateGameState(numPlayers)
+    );
+    // const bettingTimer = useRef(null);
+    // const [bettingTimeLeft, setBettingTimeLeft] = useState(interval * 10); // in ms or seconds
 
     useEffect(() => {
-        setTimeout(() => setPhase("betting"));
+        setTimeout(
+            () => dispatch({ type: "changePhase", phase: "initialDealing" }),
+            interval
+        );
     }, []);
 
     useEffect(() => {
-        if (phase === "betting") {
-            let bettingTime = interval * 10; // milliseconds or ticks
-            setBettingTimeLeft(bettingTime);
+        // if (phase === "betting") {
+        //     let bettingTime = interval * 10; // milliseconds or ticks
+        //     setBettingTimeLeft(bettingTime);
 
-            // Update countdown every 100ms (or 1s)
-            const countdownTimer = setInterval(() => {
-                setBettingTimeLeft((prev) => {
-                    const remainingTime = prev - 100;
-                    if (remainingTime <= 0) {
-                        console.log(players);
-                        const activePlayers = players.filter(
-                            (p) => p.stake > 0
-                        );
-                        if (activePlayers.length > 0) {
-                            setPlayers((prevPlayers) =>
-                                prevPlayers.map((player) => ({
-                                    ...player,
-                                    playing: true,
-                                }))
-                            );
-                            setPhase("initialDealing");
-                            setBettingTimeLeft(0);
-                            clearInterval(countdownTimer);
-                        } else {
-                            setBettingTimeLeft(bettingTime);
-                        }
-                    } else {
-                        setBettingTimeLeft(remainingTime);
-                    }
-                });
-            }, 100);
+        //     // Update countdown every 100ms (or 1s)
+        //     const countdownTimer = setInterval(() => {
+        //         setBettingTimeLeft((prev) => {
+        //             const remainingTime = prev - 100;
+        //             if (remainingTime <= 0) {
+        //                 console.log(players);
+        //                 const activePlayers = players.filter(
+        //                     (p) => p.stake > 0
+        //                 );
+        //                 if (activePlayers.length > 0) {
+        //                     setPlayers((prevPlayers) =>
+        //                         prevPlayers.map((player) => ({
+        //                             ...player,
+        //                             playing: true,
+        //                         }))
+        //                     );
+        //                     setPhase("initialDealing");
+        //                     setBettingTimeLeft(0);
+        //                     clearInterval(countdownTimer);
+        //                 } else {
+        //                     setBettingTimeLeft(bettingTime);
+        //                 }
+        //             } else {
+        //                 setBettingTimeLeft(remainingTime);
+        //             }
+        //         });
+        //     }, 100);
 
-            return () => {
-                clearInterval(countdownTimer);
-            };
-        } else if (phase === "initialDealing") {
+        //     return () => {
+        //         clearInterval(countdownTimer);
+        //     };
+        // } else if (phase === "initialDealing") {
+        if (gameState.phase === "initialDealing") {
             dealBj();
-        } else if (phase === "dealerTurn") {
+        } else if (gameState.phase === "dealerTurn") {
             const timer = window.setTimeout(() => {
-                flipDealerCard();
+                // flipping the dealer's card triggers hits via dealer.drawnPile useEffect
+                dispatch({ type: "flipDealerCard" });
             }, interval);
             return () => clearTimeout(timer);
-        } else if (phase === "handOver") {
+        } else if (gameState.phase === "handOver") {
             const timer = window.setTimeout(() => {
-                setPlayers(
-                    players.map((player) => {
-                        return {
-                            ...player,
-                            drawnPile: [],
-                            playing: false,
-                            total: 0,
-                        };
-                    })
-                );
-                let playerCards = 0;
-                for (const player of players) {
-                    playerCards += player.drawnPile.length;
-                }
-                setDealer({ drawnPile: [], total: 0 });
-                discard(playerCards + dealer.drawnPile.length);
-                setPhase("betting");
+                dispatch({ type: "reset" });
             }, interval * 3);
             return () => window.clearTimeout(timer);
         }
-    }, [phase]);
+    }, [gameState.phase]);
 
     // Handle dealer playing logic
     useEffect(() => {
-        if (phase === "dealerTurn") {
-            const currentTotal = _getTotal(dealer.drawnPile);
-            const isSoft = _isSoft17(dealer.drawnPile);
+        if (gameState.phase === "dealerTurn") {
+            const currentTotal = getTotal(gameState.dealer.drawnPile);
+            const isSoft = _isSoft17(gameState.dealer.drawnPile);
 
             // Dealer hits on soft 17 and below
             if (currentTotal < 17 || (currentTotal === 17 && isSoft)) {
@@ -119,89 +101,12 @@ const Game = ({
             } else {
                 // Dealer is done, end the hand
                 const timer = setTimeout(() => {
-                    setPhase("handOver");
+                    dispatch({ type: "changePhase", phase: "handOver" });
                 }, interval);
                 return () => clearTimeout(timer);
             }
         }
-    }, [dealer.drawnPile]);
-
-    const addToPlayer = (playerId, newCard, faceUp) => {
-        setPlayers((prevPlayers) =>
-            prevPlayers.map((player) => {
-                if (player.id !== playerId) return player;
-
-                const updatedPile = [
-                    ...player.drawnPile,
-                    {
-                        ...newCard,
-                        faceUp,
-                    },
-                ];
-                const updatedTotal = faceUp
-                    ? _getTotal(updatedPile)
-                    : player.total;
-
-                return {
-                    ...player,
-                    drawnPile: updatedPile,
-                    total: updatedTotal,
-                };
-            })
-        );
-    };
-
-    const addToDealer = (newCard, faceUp) => {
-        setDealer((prevDealer) => {
-            const updatedPile = [
-                ...prevDealer.drawnPile,
-                {
-                    ...newCard,
-                    faceUp,
-                },
-            ];
-            const updatedTotal = faceUp
-                ? _getTotal(updatedPile)
-                : prevDealer.total;
-
-            return {
-                ...prevDealer,
-                drawnPile: updatedPile,
-                total: updatedTotal,
-            };
-        });
-    };
-
-    const dealToDealer = (newCard) => {
-        setDealer((prevDealer) => {
-            const updatedPile = [
-                ...prevDealer.drawnPile,
-                {
-                    ...newCard,
-                    faceUp: true,
-                },
-            ];
-
-            return {
-                drawnPile: updatedPile,
-                total: _getTotal(updatedPile),
-            };
-        });
-    };
-
-    const flipDealerCard = () => {
-        setDealer((prevDealer) => {
-            const updatedPile = prevDealer.drawnPile.map((card, index) => ({
-                ...card,
-                faceUp: index === 1 ? true : card.faceUp, // Flip the second card
-            }));
-
-            return {
-                drawnPile: updatedPile,
-                total: _getTotal(updatedPile),
-            };
-        });
-    };
+    }, [gameState.dealer.drawnPile]);
 
     const runSequence = (steps) => {
         let totalDelay = 0;
@@ -216,41 +121,72 @@ const Game = ({
         const steps = [];
 
         // Deal card 1 to players
-        players.forEach((player, idx) => {
+        gameState.players.forEach((player, idx) => {
             steps.push({
                 delay: idx === 0 ? 0 : interval,
                 action: () =>
-                    deal((newCard) => addToPlayer(player.id, newCard, true)),
+                    deal((newCard) =>
+                        dispatch({
+                            type: "deal",
+                            target: "player",
+                            newCard,
+                            faceUp: true,
+                            playerId: player.id,
+                        })
+                    ),
             });
         });
 
         // Deal card 1 to dealer
         steps.push({
             delay: interval,
-            action: () => deal((newCard) => addToDealer(newCard, true)),
+            action: () =>
+                deal((newCard) =>
+                    dispatch({
+                        type: "deal",
+                        target: "dealer",
+                        newCard,
+                        faceUp: false,
+                    })
+                ),
         });
 
         // Deal card 2 to players
-        players.forEach((player, _) => {
+        gameState.players.forEach((player, _) => {
             steps.push({
                 delay: interval,
                 action: () =>
-                    deal((newCard) => addToPlayer(player.id, newCard, true)),
+                    deal((newCard) =>
+                        dispatch({
+                            type: "deal",
+                            target: "player",
+                            newCard,
+                            faceUp: true,
+                            playerId: player.id,
+                        })
+                    ),
             });
         });
 
         // Deal second card to dealer (face down)
         steps.push({
             delay: interval,
-            action: () => deal((newCard) => addToDealer(newCard, false)),
+            action: () =>
+                deal((newCard) =>
+                    dispatch({
+                        type: "deal",
+                        target: "dealer",
+                        newCard,
+                        faceUp: false,
+                    })
+                ),
         });
 
         // End dealer dealing phase and set active player
         steps.push({
             delay: interval,
             action: () => {
-                setPlayerTurn(players[0].id);
-                setPhase("playerTurn");
+                dispatch({ type: "changePhase", phase: "playerTurn" });
             },
         });
 
@@ -259,7 +195,15 @@ const Game = ({
     }
 
     const handleHit = (playerId) => {
-        deal((newCard) => addToPlayer(playerId, newCard, true));
+        deal((newCard) =>
+            dispatch({
+                type: "deal",
+                target: "player",
+                newCard,
+                faceUp: true,
+                playerId: player.id,
+            })
+        );
         if (currentPlayer.total >= 21) _progressGame();
     };
 
@@ -267,82 +211,42 @@ const Game = ({
         _progressGame();
     };
 
-    const handleStake = (playerId, newStake) => {
-        setPlayers((prev) =>
-            prev.map((player) =>
-                player.id !== playerId
-                    ? player
-                    : {
-                          ...player,
-                          stake: newStake,
-                      }
-            )
-        );
-    };
+    // const handleStake = (playerId, newStake) => {
+    //     setPlayers((prev) =>
+    //         prev.map((player) =>
+    //             player.id !== playerId
+    //                 ? player
+    //                 : {
+    //                       ...player,
+    //                       stake: newStake,
+    //                   }
+    //         )
+    //     );
+    // };
 
     const _progressGame = () => {
-        if (!players || players.length === 0) return;
+        if (!gameState.players || gameState.players.length === 0) return;
 
-        const playerIdx = players.findIndex((p) => p.id === playerTurn);
-        if (playerIdx + 1 === players.length) {
-            setPhase("dealerTurn");
-        } else {
-            setPlayerTurn(players[playerIdx + 1].id);
-        }
-    };
-
-    const getCardValue = (rank) => {
-        if (rank === "A") return 11;
-        if (["K", "Q", "J"].includes(rank)) return 10;
-        return parseInt(rank, 10);
-    };
-
-    const _getTotal = (playerCards) => {
-        return playerCards.reduce(
-            (sum, card) =>
-                sum + (card && card.faceUp ? getCardValue(card.rank) : 0),
-            0
+        const playerIdx = gameState.players.findIndex(
+            (p) => p.id === gameState.playerTurn
         );
+        if (playerIdx + 1 === gameState.players.length) {
+            dispatch({ type: "changePhase", phase: "dealerTurn" });
+        } else {
+            dispatch({
+                type: "setPlayerTurn",
+                playerId: gameState.players[playerIdx + 1].id,
+            });
+        }
     };
 
     const _isSoft17 = (cards) => {
         const faceUpCards = cards.filter((card) => card.faceUp);
         const hasAce = faceUpCards.some((card) => card.rank === "A");
-        const total = _getTotal(cards);
+        const total = getTotal(cards);
 
         // Soft 17: has an Ace counted as 11, and total is 17
         return hasAce && total === 17;
-    };
-
-    const handleAddPlayer = () => {
-        if (players.length < 3) {
-            setPlayers((prevPlayers) => {
-                const maxId =
-                    prevPlayers.length > 0
-                        ? Math.max(...prevPlayers.map((p) => p.id))
-                        : 0;
-                const newId = maxId + 1;
-                return [
-                    ...prevPlayers,
-                    {
-                        id: newId,
-                        drawnPile: [],
-                        playing: false,
-                        chips: 300,
-                        stake: 15,
-                        total: 0,
-                    },
-                ];
-            });
-        }
-    };
-
-    const handleRemovePlayer = () => {
-        setPlayers((prevPlayers) =>
-            prevPlayers.length > 1
-                ? prevPlayers.slice(0, prevPlayers.length - 1)
-                : prevPlayers
-        );
     };
 
     return (
@@ -351,24 +255,24 @@ const Game = ({
             <div className="game-topbar">
                 <div className="player-management-buttons">
                     <button
-                        onClick={handleAddPlayer}
-                        disabled={players.length >= 3}
+                        onClick={() => dispatch({ type: "addPlayer" })}
+                        disabled={gameState.players.length >= 3}
                     >
                         Add Player
                     </button>
                     <button
-                        onClick={handleRemovePlayer}
-                        disabled={players.length <= 1}
+                        onClick={() => dispatch({ type: "removePlayer" })}
+                        disabled={gameState.players.length <= 1}
                     >
                         Remove Player
                     </button>
                 </div>
             </div>
-            {phase === "betting" && (
+            {/* {gameState.phase === "betting" && (
                 <div className="betting-countdown-overlay">
                     Time left to bet: {Math.ceil(bettingTimeLeft / 1000)}s
                 </div>
-            )}
+            )} */}
 
             <div className="game-mat">
                 <div className="dealer-section">
@@ -378,8 +282,8 @@ const Game = ({
                     </div>
                     <div className="dealer-mat">
                         <Dealer
-                            dealerCards={dealer.drawnPile}
-                            total={dealer.total}
+                            dealerCards={gameState.dealer.drawnPile}
+                            total={gameState.dealer.total}
                         />
                     </div>
                     <div className="discardPile">
@@ -388,25 +292,26 @@ const Game = ({
                     </div>
                 </div>
                 <div className="players-list">
-                    {players.map((player) => (
+                    {gameState.players.map((player) => (
                         <div className="player-vertical-item" key={player.id}>
                             <Player
                                 onHit={() => handleHit(player.id)}
                                 onStand={() => handleStand()}
                                 canHit={
-                                    phase === "playerTurn" &&
-                                    playerTurn === player.id
+                                    gameState.phase === "playerTurn" &&
+                                    gameState.playerTurn === player.id
                                 }
                                 canStand={
-                                    phase === "playerTurn" &&
-                                    playerTurn === player.id
+                                    gameState.phase === "playerTurn" &&
+                                    gameState.playerTurn === player.id
                                 }
                                 playerCards={player.drawnPile}
                                 chips={player.chips}
                                 stake={player.stake}
-                                changeStake={(newStake) =>
-                                    handleStake(player.id, newStake)
-                                }
+                                // changeStake={(newStake) =>
+                                //     handleStake(player.id, newStake)
+                                // }
+                                changeStake={() => {}}
                                 total={player.total}
                             />
                         </div>

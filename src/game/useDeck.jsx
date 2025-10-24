@@ -62,11 +62,13 @@ export function useDeck(deckCount = 1, reshuffleAt = null) {
         }
     }, [deck, reshuffleAt]);
 
-    const deal = useCallback((callback) => {
+    const deal = (callback) => {
         const [newCard, ...newDeck] = deckRef.current;
         setDeck(newDeck);
+        // console.log("calling callback");
+        // console.log(callback);
         callback?.(newCard);
-    }, []);
+    };
 
     const discard = useCallback((cardsToDiscard) => {
         setDiscarded((prev) => prev + cardsToDiscard);
