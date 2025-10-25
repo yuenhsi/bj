@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useRef } from "react";
+import React, { useEffect, useReducer, useRef } from "react";
 import {
     instantiateGameState,
     gameStateReducer,
@@ -28,7 +28,11 @@ const Game = ({
 
     useEffect(() => {
         setTimeout(
-            () => dispatch({ type: "changePhase", phase: "initialDealing" }),
+            () =>
+                dispatch({
+                    type: "phase",
+                    phase: "initialDealing",
+                }),
             interval
         );
     }, []);
@@ -74,12 +78,17 @@ const Game = ({
             dealBj();
         } else if (gameState.phase === "dealerTurn") {
             const timer = window.setTimeout(() => {
-                // flipping the dealer's card triggers hits via dealer.drawnPile useEffect
                 dispatch({ type: "flipDealerCard" });
             }, interval);
             return () => clearTimeout(timer);
         } else if (gameState.phase === "handOver") {
+            // todo update discard
             const timer = window.setTimeout(() => {
+                const playerCards = gameState.players.reduce(
+                    (sum, player) => sum + player.drawnPile.length,
+                    0
+                );
+                discard(playerCards + gameState.dealer.drawnPile.length);
                 dispatch({ type: "reset" });
             }, interval * 3);
             return () => window.clearTimeout(timer);
@@ -88,25 +97,24 @@ const Game = ({
 
     // Handle dealer playing logic
     useEffect(() => {
-        if (gameState.phase === "dealerTurn") {
-            const currentTotal = getTotal(gameState.dealer.drawnPile);
-            const isSoft = _isSoft17(gameState.dealer.drawnPile);
+        if (gameState.phase !== "dealerTurn") return;
+        const currentTotal = getTotal(gameState.dealer.drawnPile);
+        const isSoft = _isSoft17(gameState.dealer.drawnPile);
 
-            // Dealer hits on soft 17 and below
-            if (currentTotal < 17 || (currentTotal === 17 && isSoft)) {
-                const timer = setTimeout(() => {
-                    deal((newCard) => dealToDealer(newCard));
-                }, interval);
-                return () => clearTimeout(timer);
-            } else {
-                // Dealer is done, end the hand
-                const timer = setTimeout(() => {
-                    dispatch({ type: "changePhase", phase: "handOver" });
-                }, interval);
-                return () => clearTimeout(timer);
-            }
+        // Dealer hits on soft 17 and below
+        if (currentTotal < 17 || (currentTotal === 17 && isSoft)) {
+            const timer = setTimeout(() => {
+                dealToDealer(deal());
+            }, interval);
+            return () => clearTimeout(timer);
+        } else {
+            // Dealer is done, end the hand
+            const timer = setTimeout(() => {
+                dispatch({ type: "phase", phase: "handOver" });
+            }, interval);
+            return () => clearTimeout(timer);
         }
-    }, [gameState.dealer.drawnPile]);
+    }, [gameState.phase, gameState.dealer.drawnPile]);
 
     const runSequence = (steps) => {
         let totalDelay = 0;
@@ -117,7 +125,6 @@ const Game = ({
     };
 
     function dealBj() {
-        // Build the sequence of actions for dealing cards
         const steps = [];
 
         // Deal card 1 to players
@@ -125,15 +132,12 @@ const Game = ({
             steps.push({
                 delay: idx === 0 ? 0 : interval,
                 action: () =>
-                    deal((newCard) =>
-                        dispatch({
-                            type: "deal",
-                            target: "player",
-                            newCard,
-                            faceUp: true,
-                            playerId: player.id,
-                        })
-                    ),
+                    dispatch({
+                        type: "deal",
+                        target: "player",
+                        newCard: deal(),
+                        playerId: player.id,
+                    }),
             });
         });
 
@@ -141,14 +145,11 @@ const Game = ({
         steps.push({
             delay: interval,
             action: () =>
-                deal((newCard) =>
-                    dispatch({
-                        type: "deal",
-                        target: "dealer",
-                        newCard,
-                        faceUp: false,
-                    })
-                ),
+                dispatch({
+                    type: "deal",
+                    target: "dealer",
+                    newCard: deal(),
+                }),
         });
 
         // Deal card 2 to players
@@ -156,15 +157,12 @@ const Game = ({
             steps.push({
                 delay: interval,
                 action: () =>
-                    deal((newCard) =>
-                        dispatch({
-                            type: "deal",
-                            target: "player",
-                            newCard,
-                            faceUp: true,
-                            playerId: player.id,
-                        })
-                    ),
+                    dispatch({
+                        type: "deal",
+                        target: "player",
+                        newCard: deal(),
+                        playerId: player.id,
+                    }),
             });
         });
 
@@ -172,21 +170,18 @@ const Game = ({
         steps.push({
             delay: interval,
             action: () =>
-                deal((newCard) =>
-                    dispatch({
-                        type: "deal",
-                        target: "dealer",
-                        newCard,
-                        faceUp: false,
-                    })
-                ),
+                dispatch({
+                    type: "deal",
+                    target: "dealer",
+                    newCard: deal(false),
+                }),
         });
 
         // End dealer dealing phase and set active player
         steps.push({
             delay: interval,
             action: () => {
-                dispatch({ type: "changePhase", phase: "playerTurn" });
+                dispatch({ type: "phase", phase: "playerTurn" });
             },
         });
 
@@ -195,16 +190,14 @@ const Game = ({
     }
 
     const handleHit = (playerId) => {
-        deal((newCard) =>
-            dispatch({
-                type: "deal",
-                target: "player",
-                newCard,
-                faceUp: true,
-                playerId: player.id,
-            })
-        );
-        if (currentPlayer.total >= 21) _progressGame();
+        dispatch({
+            type: "deal",
+            target: "player",
+            newCard: deal(),
+            playerId,
+        });
+        if (gameState.players.find((p) => p.id == playerId).total >= 21)
+            _progressGame();
     };
 
     const handleStand = () => {
@@ -231,7 +224,7 @@ const Game = ({
             (p) => p.id === gameState.playerTurn
         );
         if (playerIdx + 1 === gameState.players.length) {
-            dispatch({ type: "changePhase", phase: "dealerTurn" });
+            dispatch({ type: "phase", phase: "dealerTurn" });
         } else {
             dispatch({
                 type: "setPlayerTurn",

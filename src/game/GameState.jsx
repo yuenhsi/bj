@@ -20,7 +20,7 @@ export function instantiateGameState(numPlayers) {
 
 export function gameStateReducer(gameState, action) {
     switch (action.type) {
-        case "changePhase":
+        case "phase":
             return {
                 ...gameState,
                 phase: action.phase,
@@ -30,12 +30,6 @@ export function gameStateReducer(gameState, action) {
                         : gameState.playerTurn,
             };
         case "reset":
-            const playerCards = gameState.players.reduce(
-                (sum, player) => sum + player.drawnPile.length,
-                0
-            );
-            discard(playerCards + gameState.dealer.drawnPile.length);
-
             return {
                 ...gameState,
                 players: gameState.players.map((player) => ({
@@ -52,14 +46,10 @@ export function gameStateReducer(gameState, action) {
                 phase: "betting",
             };
         case "deal":
-            console.log("dealing");
             if (action.target === "dealer") {
                 const newDrawnPile = [
                     ...gameState.dealer.drawnPile,
-                    {
-                        ...action.newCard,
-                        faceUp: action.faceUp,
-                    },
+                    action.newCard,
                 ];
                 return {
                     ...gameState,
@@ -70,19 +60,12 @@ export function gameStateReducer(gameState, action) {
                     },
                 };
             } else if (action.target === "player") {
-                console.log("to player");
                 return {
                     ...gameState,
                     players: gameState.players.map((p) => {
                         if (p.id !== action.playerId) return p;
 
-                        const newDrawnPile = [
-                            ...p.drawnPile,
-                            {
-                                ...action.newCard,
-                                faceUp: action.faceUp,
-                            },
-                        ];
+                        const newDrawnPile = [...p.drawnPile, action.newCard];
                         return {
                             ...p,
                             drawnPile: newDrawnPile,

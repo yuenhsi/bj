@@ -22,7 +22,8 @@ const generateDeck = (deckCount = 1) => {
     for (let i = 0; i < deckCount; i++) {
         for (const suit of suits) {
             for (const rank of ranks) {
-                allCards.push({ suit, rank });
+                let faceUp = true;
+                allCards.push({ suit, rank, faceUp });
             }
         }
     }
@@ -48,26 +49,20 @@ export function useDeck(deckCount = 1, reshuffleAt = null) {
     }, [deck]);
 
     useEffect(() => {
-        if (deck.length <= 120) {
-            console.log("we're fucked");
-        }
-    }, [deck]);
-
-    const remaining = useCallback(() => deck.length, [deck]);
-
-    const maybeReshuffle = useCallback(() => {
         if (reshuffleAt && deck.length <= reshuffleAt) {
             setDeck(generateDeck(deckCount));
             setDiscarded(0);
         }
-    }, [deck, reshuffleAt]);
+    }, [deck]);
 
-    const deal = (callback) => {
+    const remaining = useCallback(() => deck.length, [deck]);
+    const deal = (faceUp = true) => {
         const [newCard, ...newDeck] = deckRef.current;
         setDeck(newDeck);
-        // console.log("calling callback");
-        // console.log(callback);
-        callback?.(newCard);
+        return {
+            ...newCard,
+            faceUp,
+        };
     };
 
     const discard = useCallback((cardsToDiscard) => {
