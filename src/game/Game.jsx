@@ -12,7 +12,7 @@ const Game = ({
     reshuffleAt = 120,
     interval = 300,
 }) => {
-    const { deal, discard, remaining, discarded } = useDeck(
+    const { deal, dealAce, dealKing, discard, remaining, discarded } = useDeck(
         numDecks,
         reshuffleAt
     );
@@ -48,25 +48,23 @@ const Game = ({
                 setBettingTimeLeft((prevTime) => {
                     const newTime = prevTime - 100;
 
-                    // Always refer to the latest players via ref
-                    const hasActiveStakes = playersRef.current.some(
-                        (player) => player.stake > 0
-                    );
-
-                    if (newTime <= 0 || hasActiveStakes) {
-                        if (bettingTimer.current) {
+                    if (newTime <= 0) {
+                        // Always refer to the latest players via ref
+                        const hasActiveStakes = playersRef.current.some(
+                            (player) => player.stake > 0
+                        );
+                        if (hasActiveStakes && bettingTimer.current) {
                             clearInterval(bettingTimer.current);
                             bettingTimer.current = null;
+                            dispatch({
+                                type: "phase",
+                                phase: "initialDealing",
+                            });
+                            return 0;
+                        } else {
+                            return interval * 10;
                         }
-
-                        dispatch({
-                            type: "phase",
-                            phase: "initialDealing",
-                        });
-
-                        return 0;
                     }
-
                     return newTime;
                 });
             }, 100);
@@ -124,30 +122,36 @@ const Game = ({
     };
 
     const handleStake = (playerId, newStake) => {
-        dispatch({
-            type: "setStake",
-            playerId,
-            stake: newStake,
-        });
+        if (gameState.phase === "betting") {
+            dispatch({
+                type: "setStake",
+                playerId,
+                stake: newStake,
+            });
+        }
     };
 
     const endPlayerTurn = (playerId) => {
-        let playerIdx = gameState.players.findIndex((p) => p.id === playerId);
-        if (playerIdx + 1 === gameState.players.length) {
+        const activePlayers = gameState.players.filter((p) => p.playing);
+        let playerIdx = activePlayers.findIndex((p) => p.id === playerId);
+        if (playerIdx + 1 === activePlayers.length) {
             dispatch({ type: "phase", phase: "dealerTurn" });
         } else {
             dispatch({
                 type: "setPlayerTurn",
-                playerId: gameState.players[playerIdx + 1].id,
+                playerId: activePlayers[playerIdx + 1].id,
             });
         }
     };
 
     function _dealBj(onComplete) {
         const steps = [];
+        const activePlayers = gameState.players.filter(
+            (p) => p.playing === true
+        );
 
         // Card 1
-        gameState.players.forEach((player, idx) => {
+        activePlayers.forEach((player, idx) => {
             steps.push({
                 delay: idx === 0 ? 0 : interval,
                 action: () =>
@@ -168,7 +172,7 @@ const Game = ({
         });
 
         // Card 2
-        gameState.players.forEach((player, _) => {
+        activePlayers.forEach((player, _) => {
             steps.push({
                 delay: interval,
                 action: () =>

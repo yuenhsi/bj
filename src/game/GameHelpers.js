@@ -45,6 +45,10 @@ export function getTotal(cards) {
     return total;
 }
 
+export function hasBlackjack(cards) {
+    return getTotal(cards) === 21 && cards.length === 2;
+}
+
 /**
  * Determines if the hand is a soft 17 (Ace + 6, where Ace counts as 11)
  * @param {Array} cards - Array of card objects
@@ -78,4 +82,58 @@ export function getCardValue(rank) {
     if (rank === "A") return 11;
     if (["K", "Q", "J"].includes(rank)) return 10;
     return parseInt(rank, 10);
+}
+
+export function resolvePlayerChips(players, dealerCards) {
+    return players.map((p) => {
+        if (!p.playing) {
+            return p;
+        } else {
+            let result;
+            const playerTotal = getTotal(p.cards);
+            const dealerTotal = getTotal(dealerCards);
+            // dealerPeek branch
+            if (hasBlackjack(dealerCards)) {
+                if (hasBlackjack(p.cards)) {
+                    result = "push";
+                } else {
+                    result = "lose";
+                }
+            }
+            // standard branch
+            else {
+                if (playerTotal > 21) {
+                    result = "lose";
+                } else if (dealerTotal > 21) {
+                    result = "win";
+                } else {
+                    if (getTotal(p.cards) === getTotal(dealerCards)) {
+                        if (hasBlackjack(p.cards)) {
+                            result = "win";
+                        } else {
+                            result = "push";
+                        }
+                    } else {
+                        if (getTotal(p.cards) > getTotal(dealerCards)) {
+                            result = "win";
+                        } else {
+                            result = "lose";
+                        }
+                    }
+                }
+            }
+            const newChipMap = {
+                win: p.chips + p.stake,
+                lose: p.chips - p.stake,
+                push: p.chips,
+            };
+            console.log(result);
+            console.log(newChipMap);
+            const newChips = newChipMap[result];
+            return {
+                ...p,
+                chips: newChips,
+            };
+        }
+    });
 }

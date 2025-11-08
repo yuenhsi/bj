@@ -80,7 +80,7 @@ const Player = ({
             <div className="player-chips">
                 <div className="chips-safe" onClick={handleStakeUp}>
                     <span className="chip-label">Safe</span>
-                    <span className="chip-count">{chips - stake}</span>
+                    <span className="chip-count">{chips}</span>
                 </div>
                 <div className="chips-staked" onClick={handleStakeDown}>
                     <span className="chip-label">Staked</span>

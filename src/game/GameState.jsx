@@ -1,4 +1,8 @@
-import { getTotal, shouldDealerHit } from "./GameHelpers.js";
+import {
+    getTotal,
+    shouldDealerHit,
+    resolvePlayerChips,
+} from "./GameHelpers.js";
 
 export function instantiateGameState(numPlayers) {
     return {
@@ -7,7 +11,7 @@ export function instantiateGameState(numPlayers) {
             cards: [],
             chips: 300,
             stake: 0,
-            playing: true,
+            playing: false,
         })),
         playerTurn: null,
         dealer: {
@@ -21,6 +25,40 @@ export function instantiateGameState(numPlayers) {
 export function gameStateReducer(gameState, action) {
     switch (action.type) {
         case "phase":
+            // mark active players for initial state
+            if (action.phase === "initialDealing") {
+                return {
+                    ...gameState,
+                    phase: action.phase,
+                    players: gameState.players.map((p) => {
+                        return {
+                            ...p,
+                            playing: p.stake > 0,
+                        };
+                    }),
+                };
+            }
+            // peek after deal
+            if (action.phase === "playerTurn") {
+                if (
+                    getTotal(gameState.dealer.cards) === 10 ||
+                    getTotal(gameState.dealer.cards) === 11
+                ) {
+                    if (
+                        getTotal(
+                            gameState.dealer.cards.map((c) => ({
+                                ...c,
+                                faceUp: true,
+                            }))
+                        ) === 21
+                    ) {
+                        return {
+                            ...gameState,
+                            phase: "dealerTurn",
+                        };
+                    }
+                }
+            }
             return {
                 ...gameState,
                 phase: action.phase,
@@ -35,7 +73,7 @@ export function gameStateReducer(gameState, action) {
                 players: gameState.players.map((player) => ({
                     ...player,
                     cards: [],
-                    playing: true,
+                    playing: player.stake > 0,
                 })),
                 dealer: {
                     ...gameState.dealer,
@@ -123,7 +161,7 @@ export function gameStateReducer(gameState, action) {
                     {
                         id: Math.max(gameState.players.map((p) => p.id)) + 1,
                         cards: [],
-                        playing: false,
+                        playing: true,
                         chips: 300,
                         stake: 15,
                     },
@@ -151,8 +189,13 @@ export function gameStateReducer(gameState, action) {
                     },
                 };
             } else {
+                const newPlayers = resolvePlayerChips(
+                    gameState.players,
+                    gameState.dealer.cards
+                );
                 return {
                     ...gameState,
+                    players: newPlayers,
                     phase: "endState",
                 };
             }

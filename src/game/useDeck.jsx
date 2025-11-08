@@ -65,12 +65,34 @@ export function useDeck(deckCount = 1, reshuffleAt = null) {
         };
     };
 
+    const dealAce = (faceUp = true) => {
+        const [_, ...newDeck] = deckRef.current;
+        setDeck(newDeck);
+        return {
+            rank: "A",
+            suit: "♠",
+            faceUp,
+        };
+    };
+
+    const dealKing = (faceUp = true) => {
+        const [_, ...newDeck] = deckRef.current;
+        setDeck(newDeck);
+        return {
+            rank: "K",
+            suit: "♠",
+            faceUp,
+        };
+    };
+
     const discard = useCallback((cardsToDiscard) => {
         setDiscarded((prev) => prev + cardsToDiscard);
     }, []);
 
     return {
         deal,
+        dealAce,
+        dealKing,
         discard,
         remaining,
         deck,
