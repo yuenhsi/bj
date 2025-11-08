@@ -69,11 +69,4 @@ export default class Deck {
     isEmpty() {
         return this.cards.length === 0;
     }
-
-    // Optional utility for blackjack
-    static getCardValue(rank) {
-        if (rank === "A") return 11;
-        if (["K", "Q", "J"].includes(rank)) return 10;
-        return parseInt(rank, 10);
-    }
 }

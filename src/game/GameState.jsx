@@ -1,19 +1,19 @@
+import { getTotal, shouldDealerHit } from "./GameHelpers.js";
+
 export function instantiateGameState(numPlayers) {
     return {
         players: Array.from({ length: numPlayers }, (_, idx) => ({
             id: idx + 1,
-            drawnPile: [],
+            cards: [],
             chips: 300,
             stake: 0,
-            playing: false,
-            total: 0,
+            playing: true,
         })),
         playerTurn: null,
         dealer: {
-            drawnPile: [],
-            total: 0,
+            cards: [],
         },
-        // 'betting' | 'initialDealing' | 'playerTurn' | 'dealerTurn' | 'handOver'
+        // 'betting' | 'initialDealing' | 'playerTurn' | 'dealerTurn' | 'endState'
         phase: null,
     };
 }
@@ -34,48 +34,72 @@ export function gameStateReducer(gameState, action) {
                 ...gameState,
                 players: gameState.players.map((player) => ({
                     ...player,
-                    drawnPile: [],
-                    playing: false,
-                    total: 0,
+                    cards: [],
+                    playing: true,
                 })),
                 dealer: {
                     ...gameState.dealer,
-                    drawnPile: [],
-                    total: 0,
+                    cards: [],
                 },
                 phase: "betting",
             };
         case "deal":
-            if (action.target === "dealer") {
-                const newDrawnPile = [
-                    ...gameState.dealer.drawnPile,
-                    action.newCard,
-                ];
-                return {
-                    ...gameState,
-                    dealer: {
-                        ...gameState.dealer,
-                        drawnPile: newDrawnPile,
-                        total: getTotal(newDrawnPile),
-                    },
-                };
-            } else if (action.target === "player") {
+            let player = gameState.players.find(
+                (p) => p.id === action.playerId
+            );
+            let newPlayerPile = [...player.cards, action.newCard];
+            // check whether this places the player above 21
+            if (getTotal(newPlayerPile) > 21) {
+                const activePlayers = gameState.players.filter(
+                    (p) => p.playing
+                );
+                const currentIdx = activePlayers.findIndex(
+                    (p) => p.id === action.playerId
+                );
+                if (currentIdx + 1 === activePlayers.length) {
+                    return {
+                        ...gameState,
+                        phase: "dealerTurn",
+                        playerTurn: null,
+                        players: gameState.players.map((p) => {
+                            if (p.id !== action.playerId) return p;
+
+                            return {
+                                ...p,
+                                cards: newPlayerPile,
+                            };
+                        }),
+                    };
+                } else {
+                    return {
+                        ...gameState,
+                        playerTurn: activePlayers[currentIdx + 1].id,
+                        players: gameState.players.map((p) => {
+                            if (p.id !== action.playerId) return p;
+
+                            return {
+                                ...p,
+                                cards: newPlayerPile,
+                            };
+                        }),
+                    };
+                }
+            } else {
                 return {
                     ...gameState,
                     players: gameState.players.map((p) => {
                         if (p.id !== action.playerId) return p;
 
-                        const newDrawnPile = [...p.drawnPile, action.newCard];
+                        const newPlayerPile = [...p.cards, action.newCard];
                         return {
                             ...p,
-                            drawnPile: newDrawnPile,
-                            total: getTotal(newDrawnPile),
+                            cards: newPlayerPile,
                         };
                     }),
                 };
             }
         case "flipDealerCard":
-            const updatedPile = gameState.dealer.drawnPile.map((card, idx) => ({
+            const updatedPile = gameState.dealer.cards.map((card, idx) => ({
                 ...card,
                 faceUp: idx === 1 ? true : card.faceUp,
             }));
@@ -83,8 +107,7 @@ export function gameStateReducer(gameState, action) {
                 ...gameState,
                 dealer: {
                     ...gameState.dealer,
-                    drawnPile: updatedPile,
-                    total: getTotal(updatedPile),
+                    cards: updatedPile,
                 },
             };
         case "setPlayerTurn":
@@ -99,11 +122,10 @@ export function gameStateReducer(gameState, action) {
                     ...gameState.players,
                     {
                         id: Math.max(gameState.players.map((p) => p.id)) + 1,
-                        drawnPile: [],
+                        cards: [],
                         playing: false,
                         chips: 300,
                         stake: 15,
-                        total: 0,
                     },
                 ],
             };
@@ -118,21 +140,37 @@ export function gameStateReducer(gameState, action) {
                           )
                         : gameState.players,
             };
+        case "dhit":
+            if (shouldDealerHit(gameState.dealer.cards)) {
+                let newDealerPile = [...gameState.dealer.cards, action.newCard];
+                return {
+                    ...gameState,
+                    dealer: {
+                        ...gameState.dealer,
+                        cards: newDealerPile,
+                    },
+                };
+            } else {
+                return {
+                    ...gameState,
+                    phase: "endState",
+                };
+            }
+        case "setStake":
+            return {
+                ...gameState,
+                players: gameState.players.map((player) =>
+                    player.id === action.playerId
+                        ? {
+                              ...player,
+                              stake: action.stake,
+                              chips:
+                                  player.chips - (action.stake - player.stake),
+                          }
+                        : player
+                ),
+            };
         default:
             return gameState;
     }
 }
-
-export const getTotal = (cards) => {
-    return cards.reduce(
-        (sum, card) =>
-            sum + (card && card.faceUp ? getCardValue(card.rank) : 0),
-        0
-    );
-};
-
-const getCardValue = (rank) => {
-    if (rank === "A") return 11;
-    if (["K", "Q", "J"].includes(rank)) return 10;
-    return parseInt(rank, 10);
-};

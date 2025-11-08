@@ -1,10 +1,7 @@
-import React, { useEffect, useReducer, useRef } from "react";
-import {
-    instantiateGameState,
-    gameStateReducer,
-    getTotal,
-} from "./GameState.jsx";
+import React, { useEffect, useReducer, useRef, useState } from "react";
+import { instantiateGameState, gameStateReducer } from "./GameState.jsx";
 import "./Game.scss";
+import { getTotal } from "./GameHelpers.js";
 import Player from "./Player.jsx";
 import Dealer from "./Dealer.jsx";
 import { useDeck } from "./useDeck.jsx";
@@ -23,206 +20,119 @@ const Game = ({
         gameStateReducer,
         instantiateGameState(numPlayers)
     );
-    // const bettingTimer = useRef(null);
-    // const [bettingTimeLeft, setBettingTimeLeft] = useState(interval * 10); // in ms or seconds
+    const bettingTimer = useRef(null);
+    const [bettingTimeLeft, setBettingTimeLeft] = useState(null); // in ms
 
+    // Keep track of latest players through a ref
+    const playersRef = useRef(gameState.players);
     useEffect(() => {
-        setTimeout(
-            () =>
-                dispatch({
-                    type: "phase",
-                    phase: "initialDealing",
-                }),
-            interval
-        );
+        playersRef.current = gameState.players;
+    }, [gameState.players]);
+
+    // Initialize betting phase and timer
+    useEffect(() => {
+        const initTimer = setTimeout(() => {
+            dispatch({
+                type: "phase",
+                phase: "betting",
+            });
+            setBettingTimeLeft(interval * 10); // 10 intervals worth of betting time
+        }, interval);
+
+        return () => clearTimeout(initTimer);
     }, []);
 
     useEffect(() => {
-        // if (phase === "betting") {
-        //     let bettingTime = interval * 10; // milliseconds or ticks
-        //     setBettingTimeLeft(bettingTime);
+        if (gameState.phase === "betting") {
+            bettingTimer.current = setInterval(() => {
+                setBettingTimeLeft((prevTime) => {
+                    const newTime = prevTime - 100;
 
-        //     // Update countdown every 100ms (or 1s)
-        //     const countdownTimer = setInterval(() => {
-        //         setBettingTimeLeft((prev) => {
-        //             const remainingTime = prev - 100;
-        //             if (remainingTime <= 0) {
-        //                 console.log(players);
-        //                 const activePlayers = players.filter(
-        //                     (p) => p.stake > 0
-        //                 );
-        //                 if (activePlayers.length > 0) {
-        //                     setPlayers((prevPlayers) =>
-        //                         prevPlayers.map((player) => ({
-        //                             ...player,
-        //                             playing: true,
-        //                         }))
-        //                     );
-        //                     setPhase("initialDealing");
-        //                     setBettingTimeLeft(0);
-        //                     clearInterval(countdownTimer);
-        //                 } else {
-        //                     setBettingTimeLeft(bettingTime);
-        //                 }
-        //             } else {
-        //                 setBettingTimeLeft(remainingTime);
-        //             }
-        //         });
-        //     }, 100);
+                    // Always refer to the latest players via ref
+                    const hasActiveStakes = playersRef.current.some(
+                        (player) => player.stake > 0
+                    );
 
-        //     return () => {
-        //         clearInterval(countdownTimer);
-        //     };
-        // } else if (phase === "initialDealing") {
+                    if (newTime <= 0 || hasActiveStakes) {
+                        if (bettingTimer.current) {
+                            clearInterval(bettingTimer.current);
+                            bettingTimer.current = null;
+                        }
+
+                        dispatch({
+                            type: "phase",
+                            phase: "initialDealing",
+                        });
+
+                        return 0;
+                    }
+
+                    return newTime;
+                });
+            }, 100);
+
+            // Cleanup when leaving betting phase
+            return () => {
+                if (bettingTimer.current) {
+                    clearInterval(bettingTimer.current);
+                    bettingTimer.current = null;
+                }
+            };
+        }
         if (gameState.phase === "initialDealing") {
-            dealBj();
+            _dealBj(() => dispatch({ type: "phase", phase: "playerTurn" }));
         } else if (gameState.phase === "dealerTurn") {
             const timer = window.setTimeout(() => {
                 dispatch({ type: "flipDealerCard" });
             }, interval);
             return () => clearTimeout(timer);
-        } else if (gameState.phase === "handOver") {
-            // todo update discard
+        } else if (gameState.phase === "endState") {
             const timer = window.setTimeout(() => {
                 const playerCards = gameState.players.reduce(
-                    (sum, player) => sum + player.drawnPile.length,
+                    (sum, player) => sum + player.cards.length,
                     0
                 );
-                discard(playerCards + gameState.dealer.drawnPile.length);
+                discard(playerCards + gameState.dealer.cards.length);
                 dispatch({ type: "reset" });
-            }, interval * 3);
+                // Reset betting timer for next round
+                setBettingTimeLeft(interval * 10);
+            }, interval * 5);
             return () => window.clearTimeout(timer);
         }
     }, [gameState.phase]);
 
     // Handle dealer playing logic
     useEffect(() => {
-        if (gameState.phase !== "dealerTurn") return;
-        const currentTotal = getTotal(gameState.dealer.drawnPile);
-        const isSoft = _isSoft17(gameState.dealer.drawnPile);
+        if (
+            gameState.phase !== "dealerTurn" ||
+            !gameState.dealer.cards[1].faceUp
+        )
+            return;
 
-        // Dealer hits on soft 17 and below
-        if (currentTotal < 17 || (currentTotal === 17 && isSoft)) {
-            const timer = setTimeout(() => {
-                dealToDealer(deal());
-            }, interval);
-            return () => clearTimeout(timer);
-        } else {
-            // Dealer is done, end the hand
-            const timer = setTimeout(() => {
-                dispatch({ type: "phase", phase: "handOver" });
-            }, interval);
-            return () => clearTimeout(timer);
-        }
-    }, [gameState.phase, gameState.dealer.drawnPile]);
-
-    const runSequence = (steps) => {
-        let totalDelay = 0;
-        steps.forEach(({ delay, action }) => {
-            totalDelay += delay;
-            setTimeout(action, totalDelay);
-        });
-    };
-
-    function dealBj() {
-        const steps = [];
-
-        // Deal card 1 to players
-        gameState.players.forEach((player, idx) => {
-            steps.push({
-                delay: idx === 0 ? 0 : interval,
-                action: () =>
-                    dispatch({
-                        type: "deal",
-                        target: "player",
-                        newCard: deal(),
-                        playerId: player.id,
-                    }),
-            });
-        });
-
-        // Deal card 1 to dealer
-        steps.push({
-            delay: interval,
-            action: () =>
-                dispatch({
-                    type: "deal",
-                    target: "dealer",
-                    newCard: deal(),
-                }),
-        });
-
-        // Deal card 2 to players
-        gameState.players.forEach((player, _) => {
-            steps.push({
-                delay: interval,
-                action: () =>
-                    dispatch({
-                        type: "deal",
-                        target: "player",
-                        newCard: deal(),
-                        playerId: player.id,
-                    }),
-            });
-        });
-
-        // Deal second card to dealer (face down)
-        steps.push({
-            delay: interval,
-            action: () =>
-                dispatch({
-                    type: "deal",
-                    target: "dealer",
-                    newCard: deal(false),
-                }),
-        });
-
-        // End dealer dealing phase and set active player
-        steps.push({
-            delay: interval,
-            action: () => {
-                dispatch({ type: "phase", phase: "playerTurn" });
-            },
-        });
-
-        // Execute the sequence
-        runSequence(steps);
-    }
+        const timer = setTimeout(() => {
+            dispatch({ type: "dhit", newCard: deal() });
+        }, interval);
+        return () => clearTimeout(timer);
+    }, [gameState.phase, gameState.dealer.cards]);
 
     const handleHit = (playerId) => {
         dispatch({
             type: "deal",
-            target: "player",
             newCard: deal(),
             playerId,
         });
-        if (gameState.players.find((p) => p.id == playerId).total >= 21)
-            _progressGame();
     };
 
-    const handleStand = () => {
-        _progressGame();
+    const handleStake = (playerId, newStake) => {
+        dispatch({
+            type: "setStake",
+            playerId,
+            stake: newStake,
+        });
     };
 
-    // const handleStake = (playerId, newStake) => {
-    //     setPlayers((prev) =>
-    //         prev.map((player) =>
-    //             player.id !== playerId
-    //                 ? player
-    //                 : {
-    //                       ...player,
-    //                       stake: newStake,
-    //                   }
-    //         )
-    //     );
-    // };
-
-    const _progressGame = () => {
-        if (!gameState.players || gameState.players.length === 0) return;
-
-        const playerIdx = gameState.players.findIndex(
-            (p) => p.id === gameState.playerTurn
-        );
+    const endPlayerTurn = (playerId) => {
+        let playerIdx = gameState.players.findIndex((p) => p.id === playerId);
         if (playerIdx + 1 === gameState.players.length) {
             dispatch({ type: "phase", phase: "dealerTurn" });
         } else {
@@ -233,14 +143,67 @@ const Game = ({
         }
     };
 
-    const _isSoft17 = (cards) => {
-        const faceUpCards = cards.filter((card) => card.faceUp);
-        const hasAce = faceUpCards.some((card) => card.rank === "A");
-        const total = getTotal(cards);
+    function _dealBj(onComplete) {
+        const steps = [];
 
-        // Soft 17: has an Ace counted as 11, and total is 17
-        return hasAce && total === 17;
-    };
+        // Card 1
+        gameState.players.forEach((player, idx) => {
+            steps.push({
+                delay: idx === 0 ? 0 : interval,
+                action: () =>
+                    dispatch({
+                        type: "deal",
+                        newCard: deal(),
+                        playerId: player.id,
+                    }),
+            });
+        });
+        steps.push({
+            delay: interval,
+            action: () =>
+                dispatch({
+                    type: "dhit",
+                    newCard: deal(),
+                }),
+        });
+
+        // Card 2
+        gameState.players.forEach((player, _) => {
+            steps.push({
+                delay: interval,
+                action: () =>
+                    dispatch({
+                        type: "deal",
+                        newCard: deal(),
+                        playerId: player.id,
+                    }),
+            });
+        });
+
+        steps.push({
+            delay: interval,
+            action: () =>
+                dispatch({
+                    type: "dhit",
+                    newCard: deal(false),
+                }),
+        });
+
+        // End dealer dealing phase and set active player
+        steps.push({
+            delay: interval,
+            action: () => {
+                onComplete();
+            },
+        });
+
+        // Execute the sequence
+        let totalDelay = 0;
+        steps.forEach(({ delay, action }) => {
+            totalDelay += delay;
+            setTimeout(action, totalDelay);
+        });
+    }
 
     return (
         <div className="game-container">
@@ -261,12 +224,16 @@ const Game = ({
                     </button>
                 </div>
             </div>
-            {/* {gameState.phase === "betting" && (
+            {gameState.phase === "betting" && bettingTimeLeft !== null && (
                 <div className="betting-countdown-overlay">
                     Time left to bet: {Math.ceil(bettingTimeLeft / 1000)}s
+                    {gameState.players.some((player) => player.stake > 0) && (
+                        <div className="betting-status">
+                            Players have placed bets - ready to deal!
+                        </div>
+                    )}
                 </div>
-            )} */}
-
+            )}
             <div className="game-mat">
                 <div className="dealer-section">
                     <div className="drawpile">
@@ -275,8 +242,8 @@ const Game = ({
                     </div>
                     <div className="dealer-mat">
                         <Dealer
-                            dealerCards={gameState.dealer.drawnPile}
-                            total={gameState.dealer.total}
+                            dealerCards={gameState.dealer.cards}
+                            total={getTotal(gameState.dealer.cards)}
                         />
                     </div>
                     <div className="discardPile">
@@ -289,7 +256,7 @@ const Game = ({
                         <div className="player-vertical-item" key={player.id}>
                             <Player
                                 onHit={() => handleHit(player.id)}
-                                onStand={() => handleStand()}
+                                onStand={() => endPlayerTurn(player.id)}
                                 canHit={
                                     gameState.phase === "playerTurn" &&
                                     gameState.playerTurn === player.id
@@ -298,14 +265,13 @@ const Game = ({
                                     gameState.phase === "playerTurn" &&
                                     gameState.playerTurn === player.id
                                 }
-                                playerCards={player.drawnPile}
+                                playerCards={player.cards}
                                 chips={player.chips}
                                 stake={player.stake}
-                                // changeStake={(newStake) =>
-                                //     handleStake(player.id, newStake)
-                                // }
-                                changeStake={() => {}}
-                                total={player.total}
+                                changeStake={(newStake) =>
+                                    handleStake(player.id, newStake)
+                                }
+                                total={getTotal(player.cards)}
                             />
                         </div>
                     ))}
