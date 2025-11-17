@@ -1,7 +1,25 @@
+import { useState, useEffect } from "react";
 import "./MainMenu.scss";
-import { useGoogleLogin } from "@react-oauth/google";
+import { GoogleLogin, googleLogout } from "@react-oauth/google";
+import {
+    getStoredEmail,
+    clearAuthData,
+    getDecodedToken,
+} from "../utils/auth.js";
 
 const MainMenu = () => {
+    const [userEmail, setUserEmail] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    // Initialize email from localStorage on mount
+    useEffect(() => {
+        const storedEmail = getStoredEmail();
+        if (storedEmail) {
+            setUserEmail(storedEmail);
+        }
+    }, []);
+
     const handleDailyRun = () => {
         // No operation
     };
@@ -14,63 +32,120 @@ const MainMenu = () => {
         // No operation
     };
 
-    const login = useGoogleLogin({
-        onSuccess: (tokenResponse) => {
-            console.log("Google login successful:", tokenResponse);
-            // Handle successful login - e.g., fetch user info, store token, etc.
-        },
-        onError: (error) => {
-            console.error("Google login error:", error);
-        },
-    });
+    const handleGoogleLoginSuccess = (credentialResponse) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const email = getDecodedToken(credentialResponse).email;
+            if (!email) {
+                throw new Error("Email not found in user data");
+            }
+            // Store email and token in localStorage
+            storeAuthData(email, idToken);
+            setUserEmail(email);
+        } catch (err) {
+            console.error("Error processing Google login:", err);
+            setError("Failed to process login. Please try again.");
+            // Clear any partial auth data
+            clearAuthData();
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleGoogleLoginError = () => {
+        console.error("Google login error");
+        setError("Login failed. Please try again.");
+        setIsLoading(false);
+    };
+
+    const handleLogout = () => {
+        clearAuthData();
+        setUserEmail(null);
+        setError(null);
+        googleLogout();
+    };
 
     return (
         <div className="main-menu-container">
-            <button className="google-sign-in-btn" onClick={() => login()}>
-                <svg
-                    className="google-icon"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <path
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        fill="#4285F4"
+            {error && (
+                <div className="auth-error-message">
+                    {error}
+                    <button
+                        className="error-dismiss"
+                        onClick={() => setError(null)}
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
+            {userEmail ? (
+                <div className="user-auth-display">
+                    <span className="user-email">{userEmail}</span>
+                    <button
+                        className="logout-btn"
+                        onClick={handleLogout}
+                        disabled={isLoading}
+                    >
+                        Logout
+                    </button>
+                </div>
+            ) : (
+                <div className="google-sign-in-container">
+                    <GoogleLogin
+                        onSuccess={handleGoogleLoginSuccess}
+                        onError={handleGoogleLoginError}
+                        theme="outline"
+                        size="large"
+                        text="signin_with"
+                        shape="rectangular"
                     />
-                    <path
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        fill="#34A853"
-                    />
-                    <path
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        fill="#FBBC05"
-                    />
-                    <path
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        fill="#EA4335"
-                    />
-                </svg>
-                <span>Sign in with Google</span>
-            </button>
+                </div>
+            )}
             <div className="main-menu-content">
                 <h1 className="main-menu-title">Blackjack</h1>
                 <div className="main-menu-buttons">
                     <button
-                        className="menu-btn daily-run-btn"
+                        className={`menu-btn daily-run-btn ${
+                            !userEmail ? "disabled-btn" : ""
+                        }`}
                         onClick={handleDailyRun}
+                        disabled={!userEmail}
                     >
                         Daily Run
+                        {!userEmail && (
+                            <span className="sign-in-tooltip">
+                                Sign in to play
+                            </span>
+                        )}
                     </button>
                     <button
-                        className="menu-btn practice-count-btn"
+                        className={`menu-btn practice-count-btn ${
+                            !userEmail ? "disabled-btn" : ""
+                        }`}
                         onClick={handlePracticeCount}
+                        disabled={!userEmail}
                     >
                         Practice Count
+                        {!userEmail && (
+                            <span className="sign-in-tooltip">
+                                Sign in to play
+                            </span>
+                        )}
                     </button>
                     <button
-                        className="menu-btn high-score-btn"
+                        className={`menu-btn high-score-btn ${
+                            !userEmail ? "disabled-btn" : ""
+                        }`}
                         onClick={handleHighScore}
+                        disabled={!userEmail}
                     >
                         High Score
+                        {!userEmail && (
+                            <span className="sign-in-tooltip">
+                                Sign in to play
+                            </span>
+                        )}
                     </button>
                 </div>
             </div>

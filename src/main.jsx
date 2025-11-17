@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import "./index.css";
-import Game from "./game/Game.jsx";
 import MainMenu from "./game/mainMenu.jsx";
 
 // Replace with your Google OAuth Client ID

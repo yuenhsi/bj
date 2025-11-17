@@ -41,7 +41,25 @@ export const clearAuthData = () => {
     }
 };
 
+export const getDecodedToken = (credentialResponse) => {
+    const idToken = credentialResponse.credential;
+    if (!idToken) {
+        throw new Error("No credential received");
+    }
+
+    // Decode JWT (base64url decode the payload)
+    const base64Url = idToken.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+        atob(base64)
+            .split("")
+            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join("")
+    );
+    const decodedToken = JSON.parse(jsonPayload);
+    return decodedToken;
+};
+
 export const isAuthenticated = () => {
     return !!getStoredEmail();
 };
-
