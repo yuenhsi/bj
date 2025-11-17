@@ -3,8 +3,10 @@ import "./Player.scss";
 const Player = ({
     onHit,
     onStand,
+    onDouble,
     canHit,
     canStand,
+    canDouble,
     playerCards,
     chips,
     stake,
@@ -47,6 +49,13 @@ const Player = ({
                     disabled={!canHit || total >= 21}
                 >
                     Hit
+                </button>
+                <button
+                    className="action-btn-small"
+                    onClick={onDouble}
+                    disabled={!canDouble}
+                >
+                    Double
                 </button>
                 {playerCards && (
                     <div className="player-cards">

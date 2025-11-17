@@ -249,3 +249,55 @@ button:not(:disabled):hover,
     display: flex;
     justify-content: center;
 }
+
+.eval-feedback-banner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    padding: 24px 40px;
+    border-radius: 12px;
+    font-size: 1.3em;
+    font-weight: bold;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    animation: slideIn 0.3s ease-out;
+    min-width: 400px;
+    max-width: 80vw;
+    text-align: center;
+    justify-content: center;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.eval-feedback-banner.eval-correct {
+    background: linear-gradient(135deg, #2d7a4f 0%, #3ba65c 100%);
+    border: 3px solid #4dd674;
+}
+
+.eval-feedback-banner.eval-incorrect {
+    background: linear-gradient(135deg, #b83232 0%, #d64545 100%);
+    border: 3px solid #ff6b6b;
+}
+
+.eval-icon {
+    font-size: 1.5em;
+    flex-shrink: 0;
+}
+
+.eval-text {
+    flex: 1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}

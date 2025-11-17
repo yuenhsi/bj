@@ -122,12 +122,19 @@ export function resolvePlayerChips(players, dealerCards) {
                     }
                 }
             }
+            // Calculate payout - blackjack pays 3:2, regular wins pay 1:1
+            const isBlackjackWin =
+                result === "win" &&
+                hasBlackjack(p.cards) &&
+                !hasBlackjack(dealerCards);
+            const payout = isBlackjackWin ? p.stake * 1.5 : p.stake;
+
             const newChipMap = {
-                win: p.chips + p.stake,
+                win: p.chips + payout,
                 lose: p.chips - p.stake,
                 push: p.chips,
             };
-            console.log(result);
+            console.log(result, isBlackjackWin ? "(Blackjack!)" : "");
             console.log(newChipMap);
             const newChips = newChipMap[result];
             return {

@@ -70,11 +70,16 @@ export function gameStateReducer(gameState, action) {
         case "reset":
             return {
                 ...gameState,
-                players: gameState.players.map((player) => ({
-                    ...player,
-                    cards: [],
-                    playing: player.stake > 0,
-                })),
+                players: gameState.players.map((player) => {
+                    // Cap stake at available chips to prevent negative balance
+                    const cappedStake = Math.min(player.stake, player.chips);
+                    return {
+                        ...player,
+                        cards: [],
+                        stake: cappedStake,
+                        playing: cappedStake > 0,
+                    };
+                }),
                 dealer: {
                     ...gameState.dealer,
                     cards: [],
@@ -136,6 +141,35 @@ export function gameStateReducer(gameState, action) {
                     }),
                 };
             }
+        case "double":
+            // Double down: double stake, deal one card, automatically end turn
+            const doublePlayer = gameState.players.find(
+                (p) => p.id === action.playerId
+            );
+            const newDoubleCards = [...doublePlayer.cards, action.newCard];
+            const activePlayers = gameState.players.filter((p) => p.playing);
+            const currentPlayerIdx = activePlayers.findIndex(
+                (p) => p.id === action.playerId
+            );
+            const isLastPlayer = currentPlayerIdx + 1 === activePlayers.length;
+
+            return {
+                ...gameState,
+                phase: isLastPlayer ? "dealerTurn" : gameState.phase,
+                playerTurn: isLastPlayer
+                    ? null
+                    : activePlayers[currentPlayerIdx + 1].id,
+                players: gameState.players.map((p) => {
+                    if (p.id !== action.playerId) return p;
+
+                    return {
+                        ...p,
+                        cards: newDoubleCards,
+                        stake: p.stake * 2,
+                        chips: p.chips - p.stake, // deduct additional stake
+                    };
+                }),
+            };
         case "flipDealerCard":
             const updatedPile = gameState.dealer.cards.map((card, idx) => ({
                 ...card,

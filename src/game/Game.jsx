@@ -2,6 +2,7 @@ import React, { useEffect, useReducer, useRef, useState } from "react";
 import { instantiateGameState, gameStateReducer } from "./GameState.jsx";
 import "./Game.scss";
 import { getTotal } from "./GameHelpers.js";
+import { evaluatePlay } from "./GameEval.js";
 import Player from "./Player.jsx";
 import Dealer from "./Dealer.jsx";
 import { useDeck } from "./useDeck.jsx";
@@ -10,7 +11,7 @@ const Game = ({
     numPlayers = 3,
     numDecks = 6,
     reshuffleAt = 120,
-    interval = 300,
+    interval = 900,
 }) => {
     const { deal, dealAce, dealKing, discard, remaining, discarded } = useDeck(
         numDecks,
@@ -22,6 +23,7 @@ const Game = ({
     );
     const bettingTimer = useRef(null);
     const [bettingTimeLeft, setBettingTimeLeft] = useState(null); // in ms
+    const [evalFeedback, setEvalFeedback] = useState(null); // { playerId, result, timestamp }
 
     // Keep track of latest players through a ref
     const playersRef = useRef(gameState.players);
@@ -114,8 +116,46 @@ const Game = ({
     }, [gameState.phase, gameState.dealer.cards]);
 
     const handleHit = (playerId) => {
+        const player = gameState.players.find((p) => p.id === playerId);
+
+        // Evaluate play before executing
+        const evaluation = evaluatePlay(
+            player.cards,
+            gameState.dealer.cards,
+            "hit"
+        );
+
+        setEvalFeedback({
+            playerId,
+            result: evaluation,
+            timestamp: Date.now(),
+        });
+
         dispatch({
             type: "deal",
+            newCard: deal(),
+            playerId,
+        });
+    };
+
+    const handleDouble = (playerId) => {
+        const player = gameState.players.find((p) => p.id === playerId);
+
+        // Evaluate play before executing
+        const evaluation = evaluatePlay(
+            player.cards,
+            gameState.dealer.cards,
+            "double"
+        );
+
+        setEvalFeedback({
+            playerId,
+            result: evaluation,
+            timestamp: Date.now(),
+        });
+
+        dispatch({
+            type: "double",
             newCard: deal(),
             playerId,
         });
@@ -131,7 +171,22 @@ const Game = ({
         }
     };
 
-    const endPlayerTurn = (playerId) => {
+    const handleStand = (playerId) => {
+        const player = gameState.players.find((p) => p.id === playerId);
+
+        // Evaluate play before executing
+        const evaluation = evaluatePlay(
+            player.cards,
+            gameState.dealer.cards,
+            "stand"
+        );
+
+        setEvalFeedback({
+            playerId,
+            result: evaluation,
+            timestamp: Date.now(),
+        });
+
         const activePlayers = gameState.players.filter((p) => p.playing);
         let playerIdx = activePlayers.findIndex((p) => p.id === playerId);
         if (playerIdx + 1 === activePlayers.length) {
@@ -209,9 +264,44 @@ const Game = ({
         });
     }
 
+    // Auto-dismiss feedback after 3x interval
+    useEffect(() => {
+        if (evalFeedback) {
+            const timer = setTimeout(() => {
+                setEvalFeedback(null);
+            }, interval * 3);
+            return () => clearTimeout(timer);
+        }
+    }, [evalFeedback, interval]);
+
     return (
         <div className="game-container">
             <h1 className="game-heading">Blackjack - 6 Deck Shoe</h1>
+            {evalFeedback && (
+                <div
+                    className={`eval-feedback-banner ${
+                        evalFeedback.result.suboptimal
+                            ? "eval-incorrect"
+                            : "eval-correct"
+                    }`}
+                >
+                    {evalFeedback.result.suboptimal ? (
+                        <>
+                            <span className="eval-icon">❌</span>
+                            <span className="eval-text">
+                                {evalFeedback.result.reason}
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <span className="eval-icon">✅</span>
+                            <span className="eval-text">
+                                Correct play! ({evalFeedback.result.optimal})
+                            </span>
+                        </>
+                    )}
+                </div>
+            )}
             <div className="game-topbar">
                 <div className="player-management-buttons">
                     <button
@@ -260,7 +350,8 @@ const Game = ({
                         <div className="player-vertical-item" key={player.id}>
                             <Player
                                 onHit={() => handleHit(player.id)}
-                                onStand={() => endPlayerTurn(player.id)}
+                                onStand={() => handleStand(player.id)}
+                                onDouble={() => handleDouble(player.id)}
                                 canHit={
                                     gameState.phase === "playerTurn" &&
                                     gameState.playerTurn === player.id
@@ -268,6 +359,12 @@ const Game = ({
                                 canStand={
                                     gameState.phase === "playerTurn" &&
                                     gameState.playerTurn === player.id
+                                }
+                                canDouble={
+                                    gameState.phase === "playerTurn" &&
+                                    gameState.playerTurn === player.id &&
+                                    player.cards.length === 2 &&
+                                    player.chips >= player.stake
                                 }
                                 playerCards={player.cards}
                                 chips={player.chips}
